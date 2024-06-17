@@ -1,0 +1,50 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import sklearn
+from sklearn import datasets
+from google.colab import files
+uploaded1 = files.upload()
+import io
+train_features = pd.read_csv(io.BytesIO(uploaded1['training_set_features (2).csv']))
+print(train_features)
+from google.colab import files
+uploaded2 = files.upload()
+import io
+train_labels = pd.read_csv(io.BytesIO(uploaded2['training_set_labels (1).csv']))
+print(train_labels)
+from google.colab import files
+uploaded = files.upload()
+import io
+test_features = pd.read_csv(io.BytesIO(uploaded['test_set_features.csv']))
+print(test_features)
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+categorical_cols = train_features.select_dtypes(include=['object']).columns
+numerical_cols = train_features.select_dtypes(include=['int64', 'float64']).columns
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', StandardScaler(), numerical_cols),
+        ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
+    ])
+X_train = preprocessor.fit_transform(train_features)
+y_train = train_labels
+X_test = preprocessor.transform(test_features)
+from xgboost import XGBClassifier
+from sklearn.multioutput import MultiOutputClassifier
+base_classifier = XGBClassifier(use_label_encoder=False, eval_metric='logloss', max_depth=3, n_estimators=100)
+model = MultiOutputClassifier(base_classifier, n_jobs=-1)
+model.fit(X_train, y_train)
+y_pred_prob = model.predict_proba(X_test)
+xyz_vaccine_prob = y_pred_prob[0][:, 1]  # Probability of 1 for xyz_vaccine
+seasonal_vaccine_prob = y_pred_prob[1][:, 1]  # Probability of 1 for seasonal_vaccine
+from sklearn.model_selection import cross_val_score
+scores = cross_val_score(model, X_train, y_train, cv=5, scoring='roc_auc')
+print("ROC-AUC scores:", scores)
+print("Mean ROC-AUC:", scores.mean())
+predictions = pd.DataFrame({
+    'xyz_vaccine_prob': xyz_vaccine_prob,
+    'seasonal_vaccine_prob': seasonal_vaccine_prob
+})
+predictions.to_csv('vaccine_predictions.csv', index=False)
